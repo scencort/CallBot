@@ -1,0 +1,14 @@
+[Unit]
+Description=CallBot Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/call_bot
+EnvironmentFile=/opt/call_bot/.env
+ExecStart=/opt/call_bot/.venv/bin/python /opt/call_bot/bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

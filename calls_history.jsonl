@@ -1,1 +1,2 @@
 {"call_id": 1, "started_at": "2026-07-20 23:16:29", "finished_at": "2026-07-20 23:17:17", "agreed": false, "decline_reason": "Сброс звонка", "notes": [{"question": "Когда показы проводите?", "answer": "понедельник-среда, с 9 до 15"}]}
+{"call_id": 2, "started_at": "2026-07-21 00:05:50", "finished_at": "2026-07-21 00:05:57", "agreed": false, "decline_reason": "1", "notes": []}
