@@ -160,6 +160,26 @@ def build_today_calls_keyboard(calls: list[dict[str, Any]]) -> InlineKeyboardMar
     return InlineKeyboardMarkup(rows)
 
 
+def build_call_detail_keyboard(call_id: int, has_calls: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("🗑 Удалить звонок", callback_data=f"delete_call_confirm:{call_id}")],
+    ]
+    if has_calls:
+        rows.append([InlineKeyboardButton("⬅️ Назад к списку", callback_data="back_to_today_calls")])
+    return InlineKeyboardMarkup(rows)
+
+
+def build_delete_confirm_keyboard(call_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Да, удалить", callback_data=f"delete_call:{call_id}"),
+                InlineKeyboardButton("↩️ Отмена", callback_data=f"open_call:{call_id}"),
+            ]
+        ]
+    )
+
+
 def get_session(context: ContextTypes.DEFAULT_TYPE) -> CallSession:
     session = context.user_data.get("session")
     if session is None:
@@ -396,6 +416,33 @@ def find_call_payload(call_id: int) -> dict[str, Any] | None:
     return None
 
 
+def delete_call_payload(call_id: int) -> bool:
+    path = history_file()
+    if not path.exists():
+        return False
+
+    kept_lines: list[str] = []
+    deleted = False
+    with path.open("r", encoding="utf-8") as file:
+        for line in file:
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                kept_lines.append(line)
+                continue
+            if int(payload.get("call_id", 0)) == call_id:
+                deleted = True
+                continue
+            kept_lines.append(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    if not deleted:
+        return False
+
+    with path.open("w", encoding="utf-8") as file:
+        file.writelines(kept_lines)
+    return True
+
+
 def flatten_rich_text(rich_html: str) -> str:
     replacements = {
         "<h3>": "",
@@ -626,6 +673,58 @@ async def handle_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             context,
             update.effective_chat.id,
             format_saved_call_rich(payload),
+            reply_markup=build_call_detail_keyboard(int(raw_call_id), has_calls=bool(calls)),
+        )
+        return
+
+    if query.data == "back_to_today_calls":
+        calls = load_today_calls()
+        await send_rich_message(
+            context,
+            update.effective_chat.id,
+            format_today_summary_rich(),
+            reply_markup=build_today_calls_keyboard(calls) if calls else build_main_keyboard(),
+        )
+        return
+
+    if query.data.startswith("delete_call_confirm:"):
+        _, raw_call_id = query.data.split(":", 1)
+        if not raw_call_id.isdigit():
+            return
+        payload = find_call_payload(int(raw_call_id))
+        if payload is None:
+            await query.message.reply_text("Не нашёл этот звонок.")
+            return
+        await send_rich_message(
+            context,
+            update.effective_chat.id,
+            (
+                f"<h3>Удалить звонок #{escape(raw_call_id)}?</h3>"
+                "<p>Это действие удалит из журнала все ответы клиента по этому звонку.</p>"
+            ),
+            reply_markup=build_delete_confirm_keyboard(int(raw_call_id)),
+        )
+        return
+
+    if query.data.startswith("delete_call:"):
+        _, raw_call_id = query.data.split(":", 1)
+        if not raw_call_id.isdigit():
+            return
+        deleted = delete_call_payload(int(raw_call_id))
+        calls = load_today_calls()
+        if not deleted:
+            await query.message.reply_text("Не удалось удалить звонок или он уже удалён.")
+            await send_rich_message(
+                context,
+                update.effective_chat.id,
+                format_today_summary_rich(),
+                reply_markup=build_today_calls_keyboard(calls) if calls else build_main_keyboard(),
+            )
+            return
+        await send_rich_message(
+            context,
+            update.effective_chat.id,
+            "<h3>🗑 Звонок удалён</h3><p>Запись убрана из журнала.</p>",
             reply_markup=build_today_calls_keyboard(calls) if calls else build_main_keyboard(),
         )
         return
